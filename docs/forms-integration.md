@@ -159,7 +159,42 @@ HTML 表单提交（非 JSON 请求）成功后返回 `303` 重定向，按优�
 ></form>
 ```
 
-失败时（非 JSON 请求）跳转到 `/error?error=form_not_found`、`/error?error=unsupported_content_type` 或 `/error?error=internal_error`。
+`redirect` 的值必须做 URL 编码；接口不校验该参数，因此不要在服务端拼接用户可控的内容。
+
+### 7.1 关于感谢页
+
+本工程自带两个兜底页面：
+
+- `app/routes/success.tsx` —— 绿色勾选图标 + "Submission Successful!"
+- `app/routes/error.tsx` —— 按 `?error=` 区分的三种错误页
+
+`success.tsx` 本身就是一份**可直接复制的模板**：组件体只有 JSX 和 Tailwind 类名，没有状态、没有 `components/ui/*` 依赖，唯一一行 `import` 是 `meta` 用的类型。复制到目标工程、改文案、把 `gray-*` / `green-*` 换成语义化令牌即可。
+
+`error.tsx` 同理，只是它多一个 `loader` 从 `?error=` 取文案；那部分属于服务端逻辑，复制时按目标工程的路由方式重写。
+
+但不要指望它们「已经在那儿、会自动生效」：
+
+1. 它们渲染在 FormZero 的域名下，带的是本项目的样式与文案，与目标站点的品牌不一致；
+2. 更重要的一点——**它们通常不会被用到**。浏览器跨站提交表单默认带 `Referer`，所以默认行为是把用户送回你发起提交的那个页面，而不是 `/success`。用户看到的是自己刚填的空表单，没有任何成功提示，很可能重复提交。
+
+所以实际要做的两步是：把 `success.tsx` 的 JSX 复制进目标工程，再用 `?redirect=` 指过去。
+
+```html
+<form
+  action="https://YOUR-WORKER/api/forms/YOUR-FORM-ID/submissions?redirect=https%3A%2F%2Fyoursite.com%2Fthanks"
+  method="POST"
+>
+  <!-- … 表单字段 … -->
+</form>
+```
+
+`redirect` 必须是**绝对地址**。相对路径会相对接口所在的 Worker 域名解析，而不是相对你的站点——写成 `%2Fthanks` 会把用户送到 `https://YOUR-WORKER/thanks`（通常是 404）。
+
+手写这个 URL 不是必需的：后台 **Integration** 页的 HTML 标签下有一个 **Redirect URL (optional)** 输入框，填好后下方示例代码的 `action` 会自动带上 URL 编码的 `?redirect=`，直接复制即可。注意它只作用于 HTML 示例——JS 与 React 示例里没有这个参数，需要自己拼。
+
+只有一个简单的成功/失败文案需求时，用 JSON 分支更省事（见第 8 节）：`fetch` 拿到 `201` 后自行切换页面状态，不必真的跳转。
+
+失败时（非 JSON 请求）跳转到 `/error?error=form_not_found`、`/error?error=unsupported_content_type` 或 `/error?error=internal_error`。这些页面同样在 FormZero 域名下；如果失败也需要留在目标工程内，同样只能走 JSON 分支自行处理。
 
 ## 8. JSON / fetch 提交
 
