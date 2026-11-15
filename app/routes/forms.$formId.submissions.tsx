@@ -12,6 +12,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { Inbox, TrendingUp, TrendingDown, Download } from "lucide-react"
 import type { ChartConfig } from "~/components/ui/chart"
 import { requireAuth } from "~/lib/require-auth.server"
+import { FIELD_LABELS } from "~/lib/field-labels"
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -113,7 +114,9 @@ export default function SubmissionsPage() {
 
     // Helper to escape CSV values
     const escapeCSV = (value: any) => {
-      const stringValue = value !== undefined && value !== null ? String(value) : ''
+      const stringValue = Array.isArray(value)
+        ? value.join(', ')
+        : value !== undefined && value !== null ? String(value) : ''
       // Always wrap in quotes if contains comma, quote, or newline
       if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
         return `"${stringValue.replace(/"/g, '""')}"`
@@ -129,7 +132,7 @@ export default function SubmissionsPage() {
     const dataKeys = Array.from(allKeys).sort()
 
     // Create CSV headers
-    const headers = ['ID', 'Created At', ...dataKeys]
+    const headers = ['ID', 'Created At', ...dataKeys.map(key => FIELD_LABELS.get(key) ?? key)]
 
     // Create CSV rows
     const rows = submissions.map(sub => {

@@ -4,6 +4,7 @@ import { useFetcher } from "react-router"
 import { ArrowUpDown, Trash2, Loader2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Button } from "#/components/ui/button"
+import { FIELD_LABELS } from "#/lib/field-labels"
 import {
   Tooltip,
   TooltipContent,
@@ -161,7 +162,11 @@ export function createColumns(submissions: Submission[]): ColumnDef<Submission>[
         },
         cell: ({ row }) => {
           const value = row.original.data[fieldName]
-          return <div className="text-sm">{value?.toString() || ""}</div>
+          return (
+            <div className="text-sm">
+              {Array.isArray(value) ? value.join(", ") : value?.toString() || ""}
+            </div>
+          )
         },
       }
     }
@@ -170,10 +175,14 @@ export function createColumns(submissions: Submission[]): ColumnDef<Submission>[
     return {
       id: fieldName,
       accessorFn: (row) => row.data[fieldName],
-      header: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+      header: FIELD_LABELS.get(fieldName) ?? (fieldName.charAt(0).toUpperCase() + fieldName.slice(1)),
       cell: ({ row }) => {
         const value = row.original.data[fieldName]
-        return <div className="text-sm">{value?.toString() || ""}</div>
+        return (
+          <div className="text-sm">
+            {Array.isArray(value) ? value.join(", ") : value?.toString() || ""}
+          </div>
+        )
       },
     }
   })

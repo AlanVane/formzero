@@ -65,7 +65,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       contentType.includes("multipart/form-data")
     ) {
       const formData = await request.formData();
-      submissionData = Object.fromEntries(formData);
+      // Collect repeated keys into arrays so multi-select fields are not
+      // silently truncated to their last value.
+      submissionData = {};
+      for (const [key, value] of formData.entries()) {
+        const existing = submissionData[key];
+        if (existing === undefined) {
+          submissionData[key] = value;
+        } else if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          submissionData[key] = [existing, value];
+        }
+      }
     } else {
       if (isJsonRequest) {
         return data(

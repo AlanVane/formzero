@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer"
 import type { EmailConfig } from "#/types/settings"
 import type { SubmissionEmailData } from "#/types/submission"
+import { FIELD_LABELS } from "#/lib/field-labels"
 
 /**
  * Sends a test email to verify SMTP settings
@@ -251,9 +252,8 @@ function formatSubmissionData(data: Record<string, any>): string {
 
   const rows = entries
     .map(([key, value]) => {
-      const displayKey = key
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase())
+      const displayKey =
+        FIELD_LABELS.get(key) ?? key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 
       let displayValue = formatValue(value)
 
@@ -289,9 +289,8 @@ function formatSubmissionDataText(data: Record<string, any>): string {
 
   return entries
     .map(([key, value]) => {
-      const displayKey = key
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (l) => l.toUpperCase())
+      const displayKey =
+        FIELD_LABELS.get(key) ?? key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 
       return `${displayKey}: ${formatValueText(value)}`
     })
