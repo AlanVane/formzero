@@ -21,7 +21,7 @@
 - **No artificial limits** - Commercial services often restrict you to ~50 submissions/month with no data export
 - **Deploy in minutes** - As easy as signing up for a commercial service. Not a single line of code, not even YAML
 
-Use [FormZero](https://github.com/BohdanPetryshyn/formzero) for your next big thing! ⭐ Give it a star to not forget.
+Use [FormZero](https://github.com/AlanVane/formzero) for your next big thing! ⭐ Give it a star to not forget.
 
 <br/>
 
@@ -40,7 +40,7 @@ Use [FormZero](https://github.com/BohdanPetryshyn/formzero) for your next big th
 
 ## Deploy in Seconds ⚡
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BohdanPetryshyn/formzero)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/AlanVane/formzero)
 
 Deploy your own serverless form backend in seconds - as easy as signing up for a commercial service:
 
