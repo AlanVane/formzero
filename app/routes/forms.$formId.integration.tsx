@@ -50,9 +50,52 @@ export default function IntegrationPage() {
     setTimeout(() => setCopiedCode(false), 2000)
   }
 
-  const htmlExample = `<form action="${htmlAction}" method="POST">
+  const htmlExample = `<style>
+  .project-type {
+    border: 0; padding: 0; margin: 0;
+    font-family: system-ui, sans-serif;
+  }
+  .project-type legend {
+    font-size: 0.875rem; font-weight: 500;
+    margin-bottom: 0.375rem; padding: 0;
+  }
+  .project-type-options { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+  .project-type label { position: relative; cursor: pointer; }
+  .project-type input {
+    position: absolute; width: 1px; height: 1px;
+    opacity: 0; pointer-events: none;
+  }
+  .project-type span {
+    display: inline-block; padding: 0.125rem 0.5rem;
+    font-size: 0.75rem; line-height: 1rem; font-weight: 500;
+    border-radius: 0.375rem; border: 1px solid rgba(15, 23, 42, 0.2);
+    background: rgba(15, 23, 42, 0.04); color: rgba(15, 23, 42, 0.8);
+    transition: all 0.3s ease;
+  }
+  .project-type label:hover span {
+    background: rgba(15, 23, 42, 0.1); border-color: rgba(15, 23, 42, 0.4);
+  }
+  .project-type input:checked + span {
+    background: #0f172a; border-color: #0f172a; color: #ffffff;
+  }
+  .project-type input:focus-visible + span {
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.2);
+  }
+</style>
+<form action="${htmlAction}" method="POST">
   <input type="text" name="name" placeholder="Your Name" required />
+  <input type="text" name="company" placeholder="Your Company" />
   <input type="email" name="email" placeholder="Your Email" required />
+  <fieldset class="project-type">
+    <legend>Project Type</legend>
+    <div class="project-type-options">
+      <label><input type="checkbox" name="projectType" value="AI agent" /><span>AI agent</span></label>
+      <label><input type="checkbox" name="projectType" value="Automation" /><span>Automation</span></label>
+      <label><input type="checkbox" name="projectType" value="Web app" /><span>Web app</span></label>
+      <label><input type="checkbox" name="projectType" value="Mobile app" /><span>Mobile app</span></label>
+      <label><input type="checkbox" name="projectType" value="Not sure yet" /><span>Not sure yet</span></label>
+    </div>
+  </fieldset>
   <textarea name="message" placeholder="Your Message"></textarea>
   <button type="submit">Submit</button>
 </form>`
@@ -62,7 +105,9 @@ export default function IntegrationPage() {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     name: 'John Doe',
+    company: 'Acme Inc',
     email: 'john@example.com',
+    projectType: ['Web app', 'Mobile app'],
     message: 'Hello!'
   })
 })
@@ -72,13 +117,35 @@ export default function IntegrationPage() {
 
   const reactExample = `import { useState } from 'react'
 
+const projectTypeStyles = [
+  '.project-type { border: 0; padding: 0; margin: 0; font-family: system-ui, sans-serif; }',
+  '.project-type legend { font-size: 0.875rem; font-weight: 500; margin-bottom: 0.375rem; padding: 0; }',
+  '.project-type-options { display: flex; flex-wrap: wrap; gap: 0.375rem; }',
+  '.project-type label { position: relative; cursor: pointer; }',
+  '.project-type input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }',
+  '.project-type span { display: inline-block; padding: 0.125rem 0.5rem; font-size: 0.75rem; line-height: 1rem; font-weight: 500; border-radius: 0.375rem; border: 1px solid rgba(15, 23, 42, 0.2); background: rgba(15, 23, 42, 0.04); color: rgba(15, 23, 42, 0.8); transition: all 0.3s ease; }',
+  '.project-type label:hover span { background: rgba(15, 23, 42, 0.1); border-color: rgba(15, 23, 42, 0.4); }',
+  '.project-type input:checked + span { background: #0f172a; border-color: #0f172a; color: #ffffff; }',
+  '.project-type input:focus-visible + span { box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.2); }'
+].join(' ')
+
+const projectTypeOptions = ['AI agent', 'Automation', 'Web app', 'Mobile app', 'Not sure yet']
+
 function ContactForm() {
   const [formData, setFormData] = useState({
     name: '',
+    company: '',
     email: '',
     message: ''
   })
+  const [projectTypes, setProjectTypes] = useState([])
   const [status, setStatus] = useState('')
+
+  const toggleProjectType = (type) => {
+    setProjectTypes((current) =>
+      current.includes(type) ? current.filter((item) => item !== type) : [...current, type]
+    )
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -88,12 +155,13 @@ function ContactForm() {
       const response = await fetch('${formEndpoint}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ ...formData, projectType: projectTypes })
       })
 
       if (response.ok) {
         setStatus('success')
-        setFormData({ name: '', email: '', message: '' })
+        setFormData({ name: '', company: '', email: '', message: '' })
+        setProjectTypes([])
       } else {
         setStatus('error')
       }
@@ -104,6 +172,7 @@ function ContactForm() {
 
   return (
     <form onSubmit={handleSubmit}>
+      <style>{projectTypeStyles}</style>
       <input
         type="text"
         placeholder="Your Name"
@@ -112,12 +181,35 @@ function ContactForm() {
         required
       />
       <input
+        type="text"
+        placeholder="Your Company"
+        value={formData.company}
+        onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+      />
+      <input
         type="email"
         placeholder="Your Email"
         value={formData.email}
         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
         required
       />
+      <fieldset className="project-type">
+        <legend>Project Type</legend>
+        <div className="project-type-options">
+          {projectTypeOptions.map((type) => (
+            <label key={type}>
+              <input
+                type="checkbox"
+                name="projectType"
+                value={type}
+                checked={projectTypes.includes(type)}
+                onChange={() => toggleProjectType(type)}
+              />
+              <span>{type}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <textarea
         placeholder="Your Message"
         value={formData.message}
