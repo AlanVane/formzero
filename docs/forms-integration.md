@@ -190,6 +190,8 @@ HTML 表单提交（非 JSON 请求）成功后返回 `303` 重定向，按优�
 
 `redirect` 必须是**绝对地址**。相对路径会相对接口所在的 Worker 域名解析，而不是相对你的站点——写成 `%2Fthanks` 会把用户送到 `https://YOUR-WORKER/thanks`（通常是 404）。
 
+手写这个 URL 不是必需的：后台 **Integration** 页的 HTML 标签下有一个 **Redirect URL (optional)** 输入框，填好后下方示例代码的 `action` 会自动带上 URL 编码的 `?redirect=`，直接复制即可。注意它只作用于 HTML 示例——JS 与 React 示例里没有这个参数，需要自己拼。
+
 只有一个简单的成功/失败文案需求时，用 JSON 分支更省事（见第 8 节）：`fetch` 拿到 `201` 后自行切换页面状态，不必真的跳转。
 
 失败时（非 JSON 请求）跳转到 `/error?error=form_not_found`、`/error?error=unsupported_content_type` 或 `/error?error=internal_error`。这些页面同样在 FormZero 域名下；如果失败也需要留在目标工程内，同样只能走 JSON 分支自行处理。
