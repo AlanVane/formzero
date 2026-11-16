@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer commit on the same branch makes the running job pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WRANGLER_SEND_METRICS: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts: neither postinstall here is needed. `wrangler types`
+      # (the repo's postinstall) is run by `npm run typecheck` anyway, and the
+      # native binaries this project needs (esbuild) ship as optional
+      # dependencies rather than being downloaded by an install script.
+      # Left enabled, sharp's postinstall fails on a clean checkout even though
+      # its prebuilt package is in the lockfile, which takes the whole job down
+      # over a dependency of miniflare that neither step below uses.
+      #
+      # No Cloudflare credentials are required: nothing here contacts the API or
+      # a database.
+      - run: npm ci --ignore-scripts
+
+      # cf-typegen + react-router typegen + tsc -b
+      - run: npm run typecheck
+
+      # the real production build, same command the deploy uses
+      - run: npm run build
