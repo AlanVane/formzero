@@ -15,35 +15,30 @@ import {
 import type { Settings } from "#/types/settings"
 
 // SMTP configurations for common email providers
-const SMTP_CONFIGS: Record<string, { host: string; port: number; secure: boolean; hint: string }> = {
+const SMTP_CONFIGS: Record<string, { host: string; port: number; hint: string }> = {
   "gmail.com": {
     host: "smtp.gmail.com",
     port: 587,
-    secure: true,
     hint: "For Gmail, use an App Password instead of your regular password. Go to Google Account → Security → 2-Step Verification → App passwords."
   },
   "outlook.com": {
     host: "smtp-mail.outlook.com",
     port: 587,
-    secure: true,
     hint: "For Outlook, use your regular Microsoft account password or an App Password if you have 2FA enabled."
   },
   "hotmail.com": {
     host: "smtp-mail.outlook.com",
     port: 587,
-    secure: true,
     hint: "For Hotmail, use your regular Microsoft account password or an App Password if you have 2FA enabled."
   },
   "yahoo.com": {
     host: "smtp.mail.yahoo.com",
     port: 587,
-    secure: true,
     hint: "For Yahoo, generate an App Password at: Account Info → Account Security → Generate app password."
   },
   "icloud.com": {
     host: "smtp.mail.me.com",
     port: 587,
-    secure: true,
     hint: "For iCloud, use an App-Specific Password. Go to appleid.apple.com → Sign-In and Security → App-Specific Passwords."
   },
 }
@@ -265,7 +260,7 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
                             required
                           />
                           <p className="text-sm text-muted-foreground">
-                            Common ports: 587 (TLS), 465 (SSL), 25 (Plain)
+                            587 uses STARTTLS and 465 uses implicit TLS. Port 25 is blocked on Cloudflare Workers.
                           </p>
                         </div>
                       </div>
