@@ -170,7 +170,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       let redirectUrl: string;
 
       if (redirectParam) {
-        redirectUrl = redirectParam;
+        // Path-only redirects resolve against the submitting page's origin, so
+        // one form works across multiple domains (?redirect=/thanks).
+        if (
+          redirectParam.startsWith("/") &&
+          !redirectParam.startsWith("//") &&
+          referer
+        ) {
+          try {
+            redirectUrl = new URL(redirectParam, referer).href;
+          } catch {
+            redirectUrl = redirectParam;
+          }
+        } else {
+          redirectUrl = redirectParam;
+        }
       } else if (referer) {
         redirectUrl = referer;
       } else {
