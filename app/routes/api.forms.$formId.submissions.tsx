@@ -11,6 +11,49 @@ const corsHeaders = {
   "Access-Control-Max-Age": "86400",
 };
 
+const URL_RE = /https?:\/\/|www\./i;
+const URL_COUNT_RE = /https?:\/\//gi;
+
+// Throwaway mail providers seen in form spam. Deliberately short: add domains
+// here only after confirming they cannot be legitimate business addresses.
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "euploading.com",
+  "mailinator.com",
+  "guerrillamail.com",
+  "sharklasers.com",
+  "trashmail.com",
+  "yopmail.com",
+  "10minutemail.com",
+  "temp-mail.org",
+]);
+
+/**
+ * Conservative bot heuristics. Returns a reason string when the submission
+ * looks automated, otherwise null. Real enquiries are never rejected on weak
+ * signals alone (a long message with a link is normal).
+ */
+function detectSpam(data: Record<string, any>): string | null {
+  const name = String(data.name ?? "");
+  const email = String(data.email ?? "");
+  const message = String(data.message ?? "").trim();
+
+  // A human name never contains a link; this is the pattern behind every spam
+  // row received so far.
+  if (URL_RE.test(name)) return "url_in_name";
+
+  const domain = email.split("@")[1]?.toLowerCase() ?? "";
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) return "disposable_email_domain";
+
+  // "ke0dy2" style payloads: one short token, no spaces.
+  if (/^\S{1,10}$/.test(message)) return "token_only_message";
+
+  const urlCount = (Object.values(data).map(String).join(" ").match(URL_COUNT_RE) ?? [])
+    .length;
+  if (urlCount >= 3) return "too_many_urls";
+
+  return null;
+}
+
 // Handle preflight OPTIONS requests
 export async function loader({ request }: Route.LoaderArgs) {
   if (request.method === "OPTIONS") {
@@ -92,17 +135,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const submissionId = crypto.randomUUID();
     const createdAt = Date.now();
 
+    // Bots that receive an error adapt; drop suspected spam silently and log
+    // the reason instead. The response below stays identical to a real success.
+    const spamReason = detectSpam(submissionData);
+    if (spamReason) {
+      console.warn(
+        JSON.stringify({ event: "submission_dropped", formId, reason: spamReason })
+      );
+    }
+
     // Store submission in database
-    await db
-      .prepare(
-        "INSERT INTO submissions (id, form_id, data, created_at) VALUES (?, ?, ?, ?)"
-      )
-      .bind(submissionId, formId, JSON.stringify(submissionData), createdAt)
-      .run();
+    if (!spamReason) {
+      await db
+        .prepare(
+          "INSERT INTO submissions (id, form_id, data, created_at) VALUES (?, ?, ?, ?)"
+        )
+        .bind(submissionId, formId, JSON.stringify(submissionData), createdAt)
+        .run();
+    }
 
     // Send email notification asynchronously (don't await to avoid blocking response)
     // This runs in the background after the response is sent
-    context.cloudflare.ctx.waitUntil(
+    if (!spamReason)
+      context.cloudflare.ctx.waitUntil(
       (async () => {
         try {
           // Fetch global settings
