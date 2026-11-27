@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useFetcher } from "react-router"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card"
 import { Input } from "#/components/ui/input"
@@ -83,16 +83,27 @@ export function SettingsDialog({
   const [testPassed, setTestPassed] = useState(false)
   const [testResultValid, setTestResultValid] = useState(true)
 
-  // Update form when settings prop changes
+  // Adopt the stored values only when the row itself changed. Every action on
+  // the page revalidates the settings loader and hands down a new object for
+  // the same row, which would otherwise wipe an address that was just typed
+  // and verified. Closing the dialog forgets that, so the next visit starts
+  // from what is stored.
+  const appliedUpdatedAt = useRef<number | null>(null)
+
   useEffect(() => {
-    if (settings) {
-      setEmail(settings.notification_email || "")
-      setPassword(settings.notification_email_password || "")
-      setSmtpUsername(settings.smtp_username || "")
-      setSmtpHost(settings.smtp_host || "")
-      setSmtpPort(settings.smtp_port?.toString() || "")
+    if (!open) {
+      appliedUpdatedAt.current = null
+      return
     }
-  }, [settings])
+    if (!settings || appliedUpdatedAt.current === settings.updated_at) return
+
+    appliedUpdatedAt.current = settings.updated_at
+    setEmail(settings.notification_email || "")
+    setPassword(settings.notification_email_password || "")
+    setSmtpUsername(settings.smtp_username || "")
+    setSmtpHost(settings.smtp_host || "")
+    setSmtpPort(settings.smtp_port?.toString() || "")
+  }, [open, settings])
 
   // Auto-detect SMTP settings based on email (debounced)
   useEffect(() => {
