@@ -62,8 +62,9 @@ async function deliver(env: Env, config: EmailConfig, message: Message) {
   const to = config.notification_email
 
   if (mailTransport(env) === "cloudflare" && env.EMAIL) {
+    // The local simulated binding returns nothing, so treat a missing result as sent.
     const result = await env.EMAIL.send({ ...message, from, to })
-    return result.messageId
+    return result?.messageId
   }
 
   const transporter = nodemailer.createTransport(transportOptions(config))
