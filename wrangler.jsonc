@@ -15,5 +15,18 @@
 			"database_name": "formzero",
 			"database_id": "4fcc8bf0-2125-46b2-83e6-4d5dcf24ffcc",
 		}
+	],
+	// Per-location, per-key cap on submissions. Complements the zone-level WAF
+	// rate limiting rule: the edge rule cannot distinguish forms, this one keys
+	// on IP + formId and returns the API's own JSON error shape.
+	"ratelimits": [
+		{
+			"name": "SUBMISSION_LIMITER",
+			"namespace_id": "90210",
+			"simple": {
+				"limit": 3,
+				"period": 10
+			}
+		}
 	]
 }
