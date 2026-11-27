@@ -1,4 +1,5 @@
 import { requireAuth } from "~/lib/require-auth.server"
+import { mailTransport } from "~/lib/email.server"
 import type { Route } from "./+types/settings.notifications"
 import { data } from "react-router"
 
@@ -12,6 +13,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   return data({
     settings: settings || null,
+    // The dialog hides the SMTP fields when Cloudflare sends on this
+    // deployment's behalf; the same switch decides validation below.
+    cloudflareSending: mailTransport(context.cloudflare.env) === "cloudflare",
   })
 }
 
@@ -49,17 +53,39 @@ export async function action({ request, context }: Route.ActionArgs) {
     // Parse form data
     const formData = await request.formData()
     const notification_email = formData.get("notification_email") as string
-    const notification_email_password = formData.get("notification_email_password") as string
-    const smtp_host = formData.get("smtp_host") as string
-    const smtp_port = formData.get("smtp_port") as string
+    const field = (name: string) =>
+      ((formData.get(name) as string | null) ?? "").trim() || null
+    const notification_email_password = field("notification_email_password")
+    const smtp_host = field("smtp_host")
+    const smtp_port = field("smtp_port")
+    const smtp_username = field("smtp_username")
 
-    // Validate required fields
-    if (!notification_email || !notification_email_password || !smtp_host || !smtp_port) {
+    // Validate required fields. The Cloudflare binding sends without SMTP
+    // credentials, so only the receiving address is required there.
+    const usesCloudflare = mailTransport(context.cloudflare.env) === "cloudflare"
+    const isComplete =
+      Boolean(notification_email) &&
+      (usesCloudflare ||
+        Boolean(notification_email_password && smtp_host && smtp_port))
+
+    if (!isComplete) {
       return data(
         { success: false, error: "Missing required fields" },
         { status: 400 }
       )
     }
+
+    // Cloudflare mode stores no SMTP credentials: the binding carries the
+    // authority to send, and a mailbox password or bearer token sitting in D1
+    // would only be a liability.
+    const storedPassword = usesCloudflare ? null : notification_email_password
+    const storedHost = usesCloudflare ? null : smtp_host
+    const storedPort = usesCloudflare
+      ? null
+      : smtp_port
+        ? parseInt(smtp_port, 10)
+        : null
+    const storedUsername = usesCloudflare ? null : smtp_username
 
     // Check if global settings already exist
     const existingSettings = await database
@@ -77,15 +103,17 @@ export async function action({ request, context }: Route.ActionArgs) {
               notification_email_password = ?,
               smtp_host = ?,
               smtp_port = ?,
+              smtp_username = ?,
               smtp_secure = 1,
               updated_at = ?
           WHERE id = 'global'
         `)
         .bind(
           notification_email,
-          notification_email_password,
-          smtp_host,
-          parseInt(smtp_port, 10),
+          storedPassword,
+          storedHost,
+          storedPort,
+          storedUsername,
           updatedAt
         )
         .run()
@@ -99,15 +127,17 @@ export async function action({ request, context }: Route.ActionArgs) {
             notification_email_password,
             smtp_host,
             smtp_port,
+            smtp_username,
             smtp_secure,
             updated_at
-          ) VALUES ('global', ?, ?, ?, ?, 1, ?)
+          ) VALUES ('global', ?, ?, ?, ?, ?, 1, ?)
         `)
         .bind(
           notification_email,
-          notification_email_password,
-          smtp_host,
-          parseInt(smtp_port, 10),
+          storedPassword,
+          storedHost,
+          storedPort,
+          storedUsername,
           updatedAt
         )
         .run()

@@ -5,7 +5,7 @@ import { Input } from "#/components/ui/input"
 import { Label } from "#/components/ui/label"
 import { ResultButton } from "#/components/result-button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip"
-import { Mail, Lock, Server } from "lucide-react"
+import { Mail, Lock, Server, User } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -52,9 +52,16 @@ type SettingsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   settings: Settings | null
+  /** True when Cloudflare sends on this deployment's behalf, so no SMTP login is involved. */
+  cloudflareSending: boolean
 }
 
-export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  settings,
+  cloudflareSending,
+}: SettingsDialogProps) {
   const fetcher = useFetcher()
   const testFetcher = useFetcher()
   const clearFetcher = useFetcher()
@@ -64,6 +71,7 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
   const [password, setPassword] = useState(settings?.notification_email_password || "")
   const [smtpHost, setSmtpHost] = useState(settings?.smtp_host || "")
   const [smtpPort, setSmtpPort] = useState(settings?.smtp_port?.toString() || "")
+  const [smtpUsername, setSmtpUsername] = useState(settings?.smtp_username || "")
 
   // Initialize emailDomain and smtpConfig from settings on mount
   const initialEmail = settings?.notification_email || ""
@@ -80,6 +88,7 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
     if (settings) {
       setEmail(settings.notification_email || "")
       setPassword(settings.notification_email_password || "")
+      setSmtpUsername(settings.smtp_username || "")
       setSmtpHost(settings.smtp_host || "")
       setSmtpPort(settings.smtp_port?.toString() || "")
     }
@@ -133,12 +142,13 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
   useEffect(() => {
     setTestPassed(false)
     setTestResultValid(false)
-  }, [email, password, smtpHost, smtpPort])
+  }, [email, password, smtpUsername, smtpHost, smtpPort])
 
   useEffect(() => {
     if (clearFetcher.state === "idle" && clearFetcher.data?.success) {
       setEmail("")
       setPassword("")
+      setSmtpUsername("")
       setSmtpHost("")
       setSmtpPort("")
       setEmailDomain(null)
@@ -154,6 +164,7 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
     const formData = new FormData()
     formData.append("notification_email", email)
     formData.append("notification_email_password", password)
+    formData.append("smtp_username", smtpUsername)
     formData.append("smtp_host", smtpHost)
     formData.append("smtp_port", smtpPort)
 
@@ -202,11 +213,13 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
                     required
                   />
                   <p className="text-sm text-muted-foreground">
-                    This email will be used to send and receive notifications
+                    {cloudflareSending
+                      ? "Form submission notifications are sent to this address"
+                      : "This email will be used to send and receive notifications"}
                   </p>
                 </div>
 
-                {emailDomain && (
+                {!cloudflareSending && emailDomain && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="password" className="flex items-center gap-2">
@@ -224,6 +237,24 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
                       />
                       <p className="text-sm text-muted-foreground">
                         {smtpConfig ? smtpConfig.hint : "Use your email password or app-specific password"}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="smtp-username" className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        SMTP Username
+                      </Label>
+                      <Input
+                        id="smtp-username"
+                        name="smtp_username"
+                        type="text"
+                        placeholder="Leave blank to use your email"
+                        value={smtpUsername}
+                        onChange={(e) => setSmtpUsername(e.target.value)}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Optional. Leave blank to log in with your email address. Some providers need a fixed login instead, e.g. api_token for Cloudflare Email Service.
                       </p>
                     </div>
 
@@ -273,68 +304,72 @@ export function SettingsDialog({ open, onOpenChange, settings }: SettingsDialogP
                       </>
                     )}
 
-                    <div className="pt-4 space-y-3">
-                      {testFetcher.data?.error && testResultValid && (
-                        <p className="text-sm text-destructive">
-                          {testFetcher.data.error}
-                        </p>
-                      )}
-                      <TooltipProvider>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <ResultButton
-                              type="button"
-                              variant="outline"
-                              isSubmitting={isTesting}
-                              isSuccess={testSuccess}
-                              loadingText="Sending..."
-                              successText="Test email sent!"
-                              disabled={!email || !password || !smtpHost || !smtpPort}
-                              onClick={handleTestEmail}
-                              className="w-full sm:w-auto"
-                            >
-                              Send test email
-                            </ResultButton>
-                            <Tooltip open={!testPassed ? undefined : false}>
-                              <TooltipTrigger asChild>
-                                <span className="w-full sm:w-auto">
-                                  <ResultButton
-                                    type="submit"
-                                    isSubmitting={isSaving}
-                                    isSuccess={isSaved}
-                                    loadingText="Saving..."
-                                    successText="Saved!"
-                                    disabled={!testPassed}
-                                    className="w-full sm:w-auto"
-                                  >
-                                    Save Settings
-                                  </ResultButton>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Send a test email first to verify your settings</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          {settings && (
-                            <ResultButton
-                              type="button"
-                              variant="outline"
-                              isSubmitting={isClearing}
-                              isSuccess={isCleared}
-                              loadingText="Disabling..."
-                              successText="Disabled!"
-                              className="w-full sm:w-auto text-destructive hover:text-destructive"
-                              onClick={handleDisableNotifications}
-                            >
-                              Disable Notifications
-                            </ResultButton>
-                          )}
-                        </div>
-                      </TooltipProvider>
-                    </div>
                   </>
                 )}
+                <div className="pt-4 space-y-3">
+                  {testFetcher.data?.error && testResultValid && (
+                    <p className="text-sm text-destructive">
+                      {testFetcher.data.error}
+                    </p>
+                  )}
+                  <TooltipProvider>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <ResultButton
+                          type="button"
+                          variant="outline"
+                          isSubmitting={isTesting}
+                          isSuccess={testSuccess}
+                          loadingText="Sending..."
+                          successText="Test email sent!"
+                          disabled={
+                            !email ||
+                            (!cloudflareSending &&
+                              (!password || !smtpHost || !smtpPort))
+                          }
+                          onClick={handleTestEmail}
+                          className="w-full sm:w-auto"
+                        >
+                          Send test email
+                        </ResultButton>
+                        <Tooltip open={!testPassed ? undefined : false}>
+                          <TooltipTrigger asChild>
+                            <span className="w-full sm:w-auto">
+                              <ResultButton
+                                type="submit"
+                                isSubmitting={isSaving}
+                                isSuccess={isSaved}
+                                loadingText="Saving..."
+                                successText="Saved!"
+                                disabled={!testPassed}
+                                className="w-full sm:w-auto"
+                              >
+                                Save Settings
+                              </ResultButton>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Send a test email first to verify your settings</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                        {settings && (
+                          <ResultButton
+                            type="button"
+                            variant="outline"
+                            isSubmitting={isClearing}
+                            isSuccess={isCleared}
+                            loadingText="Disabling..."
+                            successText="Disabled!"
+                            className="w-full sm:w-auto text-destructive hover:text-destructive"
+                            onClick={handleDisableNotifications}
+                          >
+                            Disable Notifications
+                          </ResultButton>
+                        )}
+                      </div>
+                  </TooltipProvider>
+                </div>
               </div>
             </fetcher.Form>
           </CardContent>

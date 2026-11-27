@@ -134,6 +134,11 @@ PY
 
 不需要真实 SMTP 凭据：`workerd` 的出站 TCP 能连到本机 `127.0.0.1`。
 
+本地必须让发信走 SMTP 分支，否则会连到真实的 Cloudflare 发信服务（绑定是 remote 的），
+所以 gitignore 的 `.dev.vars` 里要有一行 `MAIL_TRANSPORT="smtp"`；部署环境该变量是
+`cloudflare`，表示用 `send_email` 绑定发信，不需要 SMTP 凭据。通知邮件的发件人就是设置页
+填的收件地址本身，不单独配置。
+
 ```bash
 python3 scripts/smtp-sink.py --out /tmp/smtp/messages.log
 ```
@@ -167,7 +172,7 @@ grep -A4 'Project Type:' /tmp/smtp/messages.log      # 纯文本部分
 | 提交返回 405                          | curlrc 的 `location` + `-X POST` 把 POST 重发给了 `/success`；用 `-q` 或去掉 `-X`                                                           |
 | 注册返回 403 `MISSING_OR_NULL_ORIGIN` | 少了 `Origin` 头                                                                                                                            |
 | 注册返回 403 `SIGNUP_DISABLED`        | 库里已有用户，单用户约束                                                                                                                    |
-| 收不到通知邮件                        | `settings` 四个字段有空值；或看 `Failed to send email notification`                                                                         |
+| 收不到通知邮件                        | 本地 SMTP 模式下 `settings` 四个字段有空值；或看 `Failed to send email notification`                                                        |
 | 想验证 465 这条路径                   | 端口决定 TLS 模式：465 隐式 TLS、587 STARTTLS。用端口 465 起一个裸 TCP 监听，收到的第一个字节应是 TLS ClientHello（`16 03`），而不是 `EHLO` |
 | 浏览器断言全过但页面文件传不出去      | 下载目标目录必须存在且可写；脚本已 `mkdir -p`                                                                                               |
 
