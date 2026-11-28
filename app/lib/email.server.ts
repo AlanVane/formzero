@@ -1,7 +1,59 @@
 import nodemailer from "nodemailer"
-import type { EmailConfig } from "#/types/settings"
+import type { EmailConfig, MailTransport } from "#/types/settings"
 import type { SubmissionEmailData } from "#/types/submission"
 import { FIELD_LABELS } from "#/lib/field-labels"
+
+type Message = { subject: string; text: string; html: string }
+
+/**
+ * Picks how a message reaches a mail server.
+ *
+ * The settings page stores this choice, so one installation can switch between
+ * the Cloudflare binding and a classic SMTP login without a redeploy. Until
+ * something is stored the deployment decides: `MAIL_TRANSPORT=smtp` is the
+ * default local runs need, so a fake SMTP server replaces real delivery, and a
+ * Worker carrying the send binding otherwise defaults to Cloudflare.
+ */
+export function mailTransport(
+  env: Env,
+  stored?: MailTransport | null,
+): MailTransport {
+  if (stored === "smtp") return "smtp"
+  if (stored === "cloudflare" && cloudflareAvailable(env)) return "cloudflare"
+
+  // Typed from wrangler.jsonc and widened by .dev.vars, so read it as text.
+  if (String(env.MAIL_TRANSPORT) === "smtp") return "smtp"
+  return cloudflareAvailable(env) ? "cloudflare" : "smtp"
+}
+
+/** True when this deployment can offer Cloudflare as a sending method. */
+export function cloudflareAvailable(env: Env): boolean {
+  return Boolean(env.EMAIL)
+}
+
+/**
+ * The sending method a request asked to use. Asking for Cloudflare on a
+ * deployment without the send binding gets the refusal to return instead.
+ */
+export function requestedTransport(
+  env: Env,
+  submitted: string | null
+): MailTransport | Response {
+  const wants =
+    submitted === "smtp" || submitted === "cloudflare" ? submitted : null
+
+  if (wants === "cloudflare" && !cloudflareAvailable(env)) {
+    return Response.json(
+      {
+        success: false,
+        error: "Cloudflare Email Sending is not set up on this deployment",
+      },
+      { status: 400 }
+    )
+  }
+
+  return mailTransport(env, wants)
+}
 
 /**
  * Builds nodemailer transport options for the stored SMTP settings.
@@ -13,34 +65,85 @@ import { FIELD_LABELS } from "#/lib/field-labels"
  * The value is derived from the port rather than from the `smtp_secure` column,
  * because that column is written as a constant `1` for every port -- using it
  * would force TLS on 587 and break the case that works today.
+ *
+ * The auth username is the stored SMTP username when set, and the notification
+ * email otherwise: servers like Cloudflare Email Service expect a fixed login
+ * (`api_token`) that is unrelated to the mailbox address, while classic
+ * provider setups (Gmail, Outlook) authenticate with the address itself.
  */
 function transportOptions(config: EmailConfig) {
+  if (!config.smtp_host || !config.smtp_port) {
+    throw new Error("SMTP is not configured for this deployment")
+  }
   return {
     host: config.smtp_host,
     port: config.smtp_port,
     secure: config.smtp_port === 465,
     auth: {
-      user: config.notification_email,
-      pass: config.notification_email_password,
+      user: config.smtp_username?.trim() || config.notification_email,
+      pass: config.notification_email_password ?? undefined,
     },
   }
+}
+
+/**
+ * Sends one message and returns the provider's message id.
+ *
+ * A notification goes from the notification address to itself: that is the one
+ * sender every installation has, and Cloudflare accepts a sender on the domain
+ * it onboarded for sending.
+ */
+async function deliver(env: Env, config: EmailConfig, message: Message) {
+  const from = config.notification_email
+  const to = config.notification_email
+
+  if (config.transport === "cloudflare" && env.EMAIL) {
+    // The local simulated binding returns nothing, so treat a missing result as sent.
+    const result = await env.EMAIL.send({ ...message, from, to })
+    return result?.messageId
+  }
+
+  const transporter = nodemailer.createTransport(transportOptions(config))
+  const info = await transporter.sendMail({ ...message, from, to })
+  return info.messageId
+}
+
+/** Turns a provider's raw failure into something the settings page can show. */
+function describeError(error: unknown) {
+  if (!(error instanceof Error)) return "Failed to send email"
+
+  switch ((error as { code?: string }).code) {
+    case "E_SENDER_NOT_VERIFIED":
+      return "The sender address is not on a domain onboarded for Cloudflare Email Sending"
+    case "E_RECIPIENT_NOT_ALLOWED":
+      return "Cloudflare Email Service will not send to this recipient yet; verify it as a destination address"
+    case "E_FIELD_MISSING":
+      return "The message is missing a field Cloudflare Email Service requires"
+  }
+
+  // The binding only sends from a domain onboarded for Email Sending, so a
+  // free-mail sender such as gmail.com is rejected with this message.
+  if (error.message.includes("domain was not found")) {
+    return "Cloudflare can only send from a domain onboarded for Email Sending. Use an address on that domain, or switch the method to SMTP."
+  }
+  if (error.message.includes("Invalid login")) return "Invalid email or password"
+  if (error.message.includes("ENOTFOUND") || error.message.includes("ECONNREFUSED")) {
+    return "Cannot connect to SMTP server"
+  }
+  return error.message
 }
 
 /**
  * Sends a test email to verify SMTP settings
  */
 export async function sendTestEmail(
+  env: Env,
   config: EmailConfig
 ): Promise<{ success: boolean; error?: string; messageId?: string }> {
   try {
-    const transporter = nodemailer.createTransport(transportOptions(config))
-
-    // Send test email
-    const info = await transporter.sendMail({
-      from: config.notification_email,
-      to: config.notification_email,
+    const messageId = await deliver(env, config, {
       subject: "FormZero - Test Email",
-      text: "This is a test email from FormZero. Your SMTP settings are working correctly!",
+      text: "This is a test email from FormZero. Your email settings are working correctly!",
       html: `
 <!DOCTYPE html>
 <html>
@@ -71,7 +174,7 @@ export async function sendTestEmail(
                 This is a test email from <strong>FormZero</strong>.
               </p>
               <p style="margin: 0; color: #252525; font-size: 16px; line-height: 1.6;">
-                Your SMTP settings are working correctly!
+                Your email settings are working correctly!
               </p>
             </td>
           </tr>
@@ -94,23 +197,10 @@ export async function sendTestEmail(
       `.trim(),
     })
 
-    return { success: true, messageId: info.messageId }
+    return { success: true, messageId }
   } catch (error) {
     console.error("Error sending test email:", error)
-
-    // Provide more specific error message
-    let errorMessage = "Failed to send test email"
-    if (error instanceof Error) {
-      if (error.message.includes("Invalid login")) {
-        errorMessage = "Invalid email or password"
-      } else if (error.message.includes("ENOTFOUND") || error.message.includes("ECONNREFUSED")) {
-        errorMessage = "Cannot connect to SMTP server"
-      } else {
-        errorMessage = error.message
-      }
-    }
-
-    return { success: false, error: errorMessage }
+    return { success: false, error: describeError(error) }
   }
 }
 
@@ -118,12 +208,11 @@ export async function sendTestEmail(
  * Sends a notification email when a new form submission is received
  */
 export async function sendSubmissionNotification(
+  env: Env,
   config: EmailConfig,
   submission: SubmissionEmailData
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const transporter = nodemailer.createTransport(transportOptions(config))
-
     // Format the submission data for email display
     const submissionHtml = formatSubmissionData(submission.data)
     const submissionText = formatSubmissionDataText(submission.data)
@@ -134,10 +223,7 @@ export async function sendSubmissionNotification(
       timeStyle: 'long',
     })
 
-    // Send email
-    await transporter.sendMail({
-      from: config.notification_email,
-      to: config.notification_email,
+    await deliver(env, config, {
       subject: `New Submission for "${submission.formName}"`,
       text: `
 FormZero - New Form Submission
@@ -237,13 +323,7 @@ This email was automatically sent by FormZero
     return { success: true }
   } catch (error) {
     console.error("Error sending notification email:", error)
-
-    let errorMessage = "Failed to send notification email"
-    if (error instanceof Error) {
-      errorMessage = error.message
-    }
-
-    return { success: false, error: errorMessage }
+    return { success: false, error: describeError(error) }
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/settings.notifications.test"
 import { data } from "react-router"
-import { sendTestEmail } from "~/lib/email.server"
+import { requestedTransport, sendTestEmail } from "~/lib/email.server"
 import { requireAuth } from "~/lib/require-auth.server"
 
 export async function action({ context, request }: Route.ActionArgs) {
@@ -19,12 +19,27 @@ export async function action({ context, request }: Route.ActionArgs) {
     // Parse form data
     const formData = await request.formData()
     const notification_email = formData.get("notification_email") as string
-    const notification_email_password = formData.get("notification_email_password") as string
-    const smtp_host = formData.get("smtp_host") as string
-    const smtp_port = formData.get("smtp_port") as string
+    const field = (name: string) =>
+      ((formData.get(name) as string | null) ?? "").trim() || null
+    const notification_email_password = field("notification_email_password")
+    const smtp_host = field("smtp_host")
+    const smtp_port = field("smtp_port")
+    const smtp_username = field("smtp_username")
+    const transport = requestedTransport(
+      context.cloudflare.env,
+      field("transport")
+    )
+    if (transport instanceof Response) return transport
 
-    // Validate required fields
-    if (!notification_email || !notification_email_password || !smtp_host || !smtp_port) {
+    // Validate required fields. The Cloudflare binding sends without SMTP
+    // credentials, so only the receiving address is required there.
+    const usesCloudflare = transport === "cloudflare"
+    const isComplete =
+      Boolean(notification_email) &&
+      (usesCloudflare ||
+        Boolean(notification_email_password && smtp_host && smtp_port))
+
+    if (!isComplete) {
       return data(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -32,11 +47,13 @@ export async function action({ context, request }: Route.ActionArgs) {
     }
 
     // Send test email using the email service
-    const result = await sendTestEmail({
+    const result = await sendTestEmail(context.cloudflare.env, {
       notification_email,
       notification_email_password,
       smtp_host,
-      smtp_port: parseInt(smtp_port, 10),
+      smtp_port: smtp_port ? parseInt(smtp_port, 10) : null,
+      smtp_username,
+      transport,
     })
 
     if (result.success) {

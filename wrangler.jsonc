@@ -6,6 +6,21 @@
         "nodejs_compat"
     ],
 	"main": "./workers/app.ts",
+	// Cloudflare Email Service send binding. A Worker cannot dial the Email
+	// Service SMTP endpoint (Cloudflare-owned addresses are refused by the
+	// socket proxy), so this binding is the only path that reaches it.
+	"send_email": [
+		{
+			"name": "EMAIL",
+			"remote": true
+		}
+	],
+	"vars": {
+		// Default sending method until the settings page stores one: "smtp"
+		// keeps local runs on the nodemailer path, where a fake SMTP server
+		// replaces real delivery.
+		"MAIL_TRANSPORT": "cloudflare"
+	},
 	"observability": {
 		"enabled": true
 	},

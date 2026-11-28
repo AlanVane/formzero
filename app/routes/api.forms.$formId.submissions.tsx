@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.forms.$formId.submissions";
 import { data, redirect } from "react-router";
-import { sendSubmissionNotification } from "~/lib/email.server";
-import type { EmailConfig } from "#/types/settings";
+import { mailTransport, sendSubmissionNotification } from "~/lib/email.server";
+import type { EmailConfig, MailTransport } from "#/types/settings";
 
 // CORS headers to allow submissions from any domain
 const corsHeaders = {
@@ -163,21 +163,31 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           // Fetch global settings
           const globalSettings = await db
             .prepare(
-              "SELECT notification_email, notification_email_password, smtp_host, smtp_port FROM settings WHERE id = 'global'"
+              "SELECT notification_email, notification_email_password, smtp_host, smtp_port, smtp_username, transport FROM settings WHERE id = 'global'"
             )
             .first<{
               notification_email: string | null
               notification_email_password: string | null
               smtp_host: string | null
               smtp_port: number | null
+              smtp_username: string | null
+              transport: MailTransport | null
             }>();
 
-          // Check if email notifications are configured
+          // Check if email notifications are configured. The Cloudflare
+          // binding needs no SMTP credentials, so only the receiving address
+          // is required there.
+          const transport = mailTransport(
+            context.cloudflare.env,
+            globalSettings?.transport ?? null
+          );
+          const usesCloudflare = transport === "cloudflare";
           if (
             globalSettings?.notification_email &&
-            globalSettings?.notification_email_password &&
-            globalSettings?.smtp_host &&
-            globalSettings?.smtp_port
+            (usesCloudflare ||
+              (globalSettings.notification_email_password &&
+                globalSettings.smtp_host &&
+                globalSettings.smtp_port))
           ) {
             // Fetch form name for email
             const formData = await db
@@ -192,15 +202,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
                 notification_email_password: globalSettings.notification_email_password,
                 smtp_host: globalSettings.smtp_host,
                 smtp_port: globalSettings.smtp_port,
+                smtp_username: globalSettings.smtp_username,
+                transport,
               };
 
-              await sendSubmissionNotification(emailConfig, {
-                id: submissionId,
-                formId: formId,
-                formName: formData.name,
-                data: submissionData,
-                createdAt: createdAt,
-              });
+              await sendSubmissionNotification(
+                context.cloudflare.env,
+                emailConfig,
+                {
+                  id: submissionId,
+                  formId: formId,
+                  formName: formData.name,
+                  data: submissionData,
+                  createdAt: createdAt,
+                }
+              );
             }
           }
         } catch (error) {

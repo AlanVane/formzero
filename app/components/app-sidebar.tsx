@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu"
 import { SettingsDialog } from "#/components/settings-dialog"
-import type { Settings as SettingsType } from "#/types/settings"
+import type { MailTransport, Settings as SettingsType } from "#/types/settings"
 
 type AppSidebarProps = {
   forms: Form[]
@@ -36,6 +36,8 @@ export function AppSidebar({ forms, user, ...props }: AppSidebarProps) {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<SettingsType | null>(null)
+  const [transport, setTransport] = useState<MailTransport>("smtp")
+  const [cloudflareAvailable, setCloudflareAvailable] = useState(false)
 
   // Fetch settings when dialog opens
   useEffect(() => {
@@ -48,6 +50,10 @@ export function AppSidebar({ forms, user, ...props }: AppSidebarProps) {
   useEffect(() => {
     if (settingsFetcher.data?.settings) {
       setSettings(settingsFetcher.data.settings)
+    }
+    if (settingsFetcher.data) {
+      setTransport(settingsFetcher.data.transport)
+      setCloudflareAvailable(settingsFetcher.data.cloudflareAvailable)
     }
   }, [settingsFetcher.data])
 
@@ -104,6 +110,8 @@ export function AppSidebar({ forms, user, ...props }: AppSidebarProps) {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         settings={settings}
+        transport={transport}
+        cloudflareAvailable={cloudflareAvailable}
       />
     </Sidebar>
   )

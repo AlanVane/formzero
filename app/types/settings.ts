@@ -2,15 +2,26 @@ export type Settings = {
   id: string
   notification_email: string | null
   notification_email_password: string | null
+  smtp_username: string | null
   smtp_host: string | null
   smtp_port: number | null
   smtp_secure: number
+  /** NULL means the deployment default decides. */
+  transport: MailTransport | null
   updated_at: number
 }
 
+/** How one deployment hands a message to a mail server. */
+export type MailTransport = "cloudflare" | "smtp"
+
 export type EmailConfig = {
   notification_email: string
-  notification_email_password: string
-  smtp_host: string
-  smtp_port: number
+  /** NULL on deployments that send through the Cloudflare binding. */
+  notification_email_password: string | null
+  /** NULL means the notification email doubles as the SMTP login. */
+  smtp_username: string | null
+  smtp_host: string | null
+  smtp_port: number | null
+  /** The method this message takes, already resolved from the stored setting. */
+  transport: MailTransport
 }
