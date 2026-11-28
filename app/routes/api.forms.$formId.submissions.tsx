@@ -1,6 +1,7 @@
 import type { Route } from "./+types/api.forms.$formId.submissions";
 import { data, redirect } from "react-router";
 import { mailTransport, sendSubmissionNotification } from "~/lib/email.server";
+import { detectSpam } from "~/lib/spam";
 import type { EmailConfig, MailTransport } from "#/types/settings";
 
 // CORS headers to allow submissions from any domain
@@ -10,49 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Accept",
   "Access-Control-Max-Age": "86400",
 };
-
-const URL_RE = /https?:\/\/|www\./i;
-const URL_COUNT_RE = /https?:\/\//gi;
-
-// Throwaway mail providers seen in form spam. Deliberately short: add domains
-// here only after confirming they cannot be legitimate business addresses.
-const DISPOSABLE_EMAIL_DOMAINS = new Set([
-  "euploading.com",
-  "mailinator.com",
-  "guerrillamail.com",
-  "sharklasers.com",
-  "trashmail.com",
-  "yopmail.com",
-  "10minutemail.com",
-  "temp-mail.org",
-]);
-
-/**
- * Conservative bot heuristics. Returns a reason string when the submission
- * looks automated, otherwise null. Real enquiries are never rejected on weak
- * signals alone (a long message with a link is normal).
- */
-function detectSpam(data: Record<string, any>): string | null {
-  const name = String(data.name ?? "");
-  const email = String(data.email ?? "");
-  const message = String(data.message ?? "").trim();
-
-  // A human name never contains a link; this is the pattern behind every spam
-  // row received so far.
-  if (URL_RE.test(name)) return "url_in_name";
-
-  const domain = email.split("@")[1]?.toLowerCase() ?? "";
-  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) return "disposable_email_domain";
-
-  // "ke0dy2" style payloads: one short token, no spaces.
-  if (/^\S{1,10}$/.test(message)) return "token_only_message";
-
-  const urlCount = (Object.values(data).map(String).join(" ").match(URL_COUNT_RE) ?? [])
-    .length;
-  if (urlCount >= 3) return "too_many_urls";
-
-  return null;
-}
 
 // Handle preflight OPTIONS requests
 export async function loader({ request }: Route.LoaderArgs) {
@@ -141,6 +99,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (spamReason) {
       console.warn(
         JSON.stringify({ event: "submission_dropped", formId, reason: spamReason })
+      );
+
+      // Keep the row so a false positive is recoverable and the heuristic has
+      // something to be tuned against. waitUntil: this must not delay or alter
+      // the response, and a failure here must not fail the submission.
+      context.cloudflare.ctx.waitUntil(
+        db
+          .prepare(
+            "INSERT INTO dropped_submissions (id, form_id, data, reason, created_at) VALUES (?, ?, ?, ?, ?)"
+          )
+          .bind(submissionId, formId, JSON.stringify(submissionData), spamReason, createdAt)
+          .run()
+          .catch((e) => console.error("Failed to record dropped submission:", e))
       );
     }
 

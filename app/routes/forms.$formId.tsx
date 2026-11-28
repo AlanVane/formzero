@@ -53,7 +53,9 @@ export default function FormLayout() {
 
   const pathSegments = location.pathname.split("/").filter(Boolean)
   const currentPage = pathSegments[pathSegments.length - 1];
-  const pageTitle = currentPage.charAt(0).toUpperCase() + currentPage.slice(1)
+  const pageTitle = currentPage === "dropped"
+    ? "Held for review"
+    : currentPage.charAt(0).toUpperCase() + currentPage.slice(1)
 
   return (<>
     <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">

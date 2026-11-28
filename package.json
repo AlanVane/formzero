@@ -12,6 +12,7 @@
 		"postinstall": "npm run cf-typegen",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
+		"check:spam": "tsx scripts/check-spam.ts",
 		"better-auth-generate": "@better-auth/cli@latest generate --output migrations/change-this-name.sql --config better-auth/config.ts --y",
 		"env": "dotenv -e .dev.vars --",
 		"env:prod": "dotenv -e .dev.vars.production --"
