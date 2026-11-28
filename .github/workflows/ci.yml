@@ -39,5 +39,8 @@ jobs:
       # cf-typegen + react-router typegen + tsc -b
       - run: npm run typecheck
 
+      # spam heuristic assertion table (app/lib/spam.ts)
+      - run: npm run check:spam
+
       # the real production build, same command the deploy uses
       - run: npm run build

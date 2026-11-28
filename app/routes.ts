@@ -11,6 +11,7 @@ export default [
     route(":formId", "routes/forms.$formId.tsx", [
       route("submissions", "routes/forms.$formId.submissions.tsx"),
       route("submissions/:submissionId", "routes/forms.$formId.submissions.$submissionId.tsx"),
+      route("dropped", "routes/forms.$formId.dropped.tsx"),
       route("integration", "routes/forms.$formId.integration.tsx"),
       route("settings", "routes/forms.$formId.settings.tsx"),
     ]),
